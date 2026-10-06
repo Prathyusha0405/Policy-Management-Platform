@@ -1,0 +1,38 @@
+/mvnw text eol=lf
+*.cmd text eol=crlf
+
+# Normalize text files automatically and ensure consistent EOL
+* text=auto
+*.java text
+*.xml text
+*.yml text
+*.yaml text
+*.properties text
+*.md text
+*.txt text
+*.gradle text
+*.groovy text
+*.sh text eol=lf
+*.bat text eol=crlf
+
+# Mark common binary files so Git won't try to normalize them
+*.jar binary
+*.war binary
+*.ear binary
+*.exe binary
+*.dll binary
+*.so binary
+*.dylib binary
+*.class binary
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.pdf binary
+
+# Do not attempt to normalize build output
+/target/* -text
+
+# Exclude build artifacts from generated archives
+target/ export-ignore
