@@ -1,157 +1,56 @@
 # Policy Management Service
 
-## Overview
+Spring Boot 4 REST API for insurance policy data: list/search, get by id, bulk flag for review, portfolio summary.
+Contract-first (`openapi/policy-api.yaml`), Clean Architecture, H2 (in-memory) + Flyway, 240 seeded policies.
 
-Policy Management Service is a RESTful backend application built using **Java and Spring Boot**.
+## Layout (`com.hcl.prathyusha.policyservice`)
 
-The service provides APIs to search, retrieve, flag, and summarize insurance policies.
+| Package | Responsibility |
+|---|---|
+| `api` | Controller implementing the **generated** `PoliciesApi`, API mapper (`api.generated` is build output, never edited) |
+| `application` | `PolicyService` — use cases, transactions, sort/date validation |
+| `domain` | Framework-free models, enums, `PolicyRepository` contract |
+| `infrastructure` | JPA entity, Spring Data repo, `PolicySpecifications`, repository adapter, config |
+| `common` | `GlobalExceptionHandler` (RFC 9457 `ProblemDetail`), request logging filter |
 
-### Key Features
+## Build / run / test
 
-* Policy retrieval and search
-* Pagination and sorting
-* Filtering by status, line of business, region, and effective date
-* Free-text search
-* Bulk policy flagging for review
-* Policy summary and aggregation
-* OpenAPI 3 contract
-* H2 relational database
-* Flyway database migrations
-* Global exception handling
-* Health monitoring using Spring Boot Actuator
-* Automated testing
-
-## Software and Technology
-
-* **Programming Language:** Java 21
-* **Framework:** Spring Boot
-* **Build Tool:** Maven
-* **IDE:** Eclipse IDE or InteliJ IDE
-* **Database:** H2
-* **Database Migration:** Flyway
-* **Persistence:** Spring Data JPA
-* **API Documentation:** OpenAPI / Swagger
-* **Testing:** JUnit 5 and Mockito
-
-## Setup
-
-### Prerequisites
-
-* Java 21
-* Maven
-* Eclipse IDE
-
-### Import the Project in Eclipse
-
-1. Open Eclipse.
-2. Select **File → Import**.
-3. Select **Maven → Existing Maven Projects**.
-4. Select the `policy-service` project directory.
-5. Click **Finish**.
-6. Allow Maven dependencies to download.
-
-### Run the Application
-
-The application can be started from Eclipse by running the main Spring Boot application class:
-
-```text
-com.prathyusha.chubb.policy.PolicyServiceApplication
-```
-
-Alternatively, run from the terminal:
+Needs a JDK 21+ (`JAVA_HOME` set).
 
 ```bash
-mvn spring-boot:run
+./mvnw -B verify          # generate sources, test, JaCoCo (>= 80% line coverage enforced)
+./mvnw spring-boot:run    # http://localhost:8080
+./mvnw generate-sources   # regenerate API interfaces/models from the OpenAPI contract
 ```
 
-The application runs on:
+Windows: `mvnw.cmd`.
 
-```text
-http://localhost:8080
-```
-
-## API Reference
-
-### List Policies
-
-```text
-GET /api/v1/policies
-```
-
-Supports pagination, sorting, filtering, and free-text search.
-
-### Get Policy
-
-```text
-GET /api/v1/policies/{id}
-```
-
-Returns a policy by its UUID.
-
-### Flag Policies
-
-```text
-PATCH /api/v1/policies/flag
-```
-
-Flags multiple policies for review.
-
-### Policy Summary
-
-```text
-GET /api/v1/policies/summary
-```
-
-Returns policy counts, premium totals by line of business, and expiring-soon policies.
-
-## API Documentation
-
-OpenAPI contract:
-
-```text
-src/main/resources/openapi/policy-api.yaml
-```
-
-Swagger UI:
-
-```text
-http://localhost:8080/swagger-ui/index.html
-```
-
-## Database
-
-H2 is used as the relational database for local development and testing.
-
-Flyway manages database schema creation and seed data.
-
-Migration files:
-
-```text
-src/main/resources/db/migration/
-```
-
-## Testing
-
-Run all tests using Maven:
+## Endpoints
 
 ```bash
-mvn clean test
+# list (page, size<=100, sort=field,dir, status, lineOfBusiness, region, effectiveDateFrom/To, search)
+curl "http://localhost:8080/api/v1/policies?page=0&size=20&sort=premiumAmount,desc&status=ACTIVE&lineOfBusiness=PROPERTY&region=Singapore&search=Tan"
+
+# by id (404 problem+json if unknown)
+curl http://localhost:8080/api/v1/policies/<uuid>
+
+# summary: counts by status, premium by line of business, active policies expiring in the next 30 days
+curl http://localhost:8080/api/v1/policies/summary
+
+# bulk flag (1-500 ids; unknown ids are ignored, response is the number actually flagged)
+curl -X PATCH http://localhost:8080/api/v1/policies/flag -H "Content-Type: application/json" \
+     -d '{"policyIds":["<uuid-1>","<uuid-2>"]}'
+
+curl http://localhost:8080/actuator/health
 ```
 
-Tests cover:
+Sortable fields: `policyNumber, policyholderName, premiumAmount, effectiveDate, expiryDate, status`; anything else → `400`.
 
-* Application/service logic
-* REST API behavior
-* Validation
-* Exception handling
-* Policy filtering
-* Pagination and sorting
-* Database interactions
+## Design notes / trade-offs
 
-## Project Documentation
-
-Additional documentation is available in:
-
-* `NOTES.md` – implementation notes and assumptions
-* `Policy Management Service Short Walkthrough.md` – short application walkthrough
-* `ARCHITECTURE.md` – architecture and design details
+- Filtering, search, sorting and paging run in the database (JPA Specification, `Pageable`); summary uses `GROUP BY` queries.
+- Schema is owned by Flyway (`V1` table + indexes, `V2` seed); Hibernate runs with `ddl-auto=validate`.
+- Seed dates are relative to the day the app starts, so "expiring soon" always has data.
+- Premium totals are summed per line of business **without currency conversion** (seed data mixes currencies).
+- Not included yet: Testcontainers/RestAssured tests (H2 is used directly), k6/JMeter performance scripts.
+ 
